@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Historique — IT Knowledge Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main-content">
+      <div class="topheader" id="topheader"></div>
+
+      <div class="page">
+        <h2>Mes activités</h2>
+        <p class="subtitle">Résumé de ta contribution au Knowledge Hub.</p>
+
+        <div class="stats-grid" id="stats-grid"></div>
+
+        <h4>Activité récente</h4>
+        <div id="feed-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="api.js"></script>
+  <script>
+    requireAuth();
+
+    const activityIcons = {
+      incident_opened: "📋",
+      solution_authored: "💬",
+      star_given: "⭐",
+    };
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function renderStats(stats) {
+      document.getElementById("stats-grid").innerHTML = `
+        <div class="stat-card"><div class="value blue">${stats.incidents_opened}</div><div class="label">Incidents déclarés</div></div>
+        <div class="stat-card"><div class="value green">${stats.incidents_resolved}</div><div class="label">Incidents résolus</div></div>
+        <div class="stat-card"><div class="value teal">${stats.solutions_authored}</div><div class="label">Solutions proposées</div></div>
+        <div class="stat-card"><div class="value orange">${stats.stars_given}</div><div class="label">Étoiles données</div></div>
+        <div class="stat-card"><div class="value orange">${stats.stars_received}</div><div class="label">Étoiles reçues</div></div>
+      `;
+    }
+
+    function renderFeed(feed) {
+      const list = document.getElementById("feed-list");
+      if (feed.length === 0) {
+        list.innerHTML = `<div class="empty-state">Aucune activité pour l'instant.</div>`;
+        return;
+      }
+      list.innerHTML = feed.map((item) => `
+        <a class="card incident-card" href="${item.related_incident_id ? `incident-detail.html?id=${item.related_incident_id}` : "#"}">
+          <div class="meta-row">
+            <span style="font-size:16px;">${activityIcons[item.type] || "•"}</span>
+            <span class="incident-title" style="font-size:13.5px;">${escapeHtml(item.description)}</span>
+          </div>
+          <div class="meta-row" style="margin-top:0.3rem;">
+            <span class="ticket-id">${formatDate(item.date)}</span>
+          </div>
+        </a>
+      `).join("");
+    }
+
+    async function init() {
+      const me = await fetchCurrentTechnician();
+      if (!me) return;
+      renderAppShell(me, "historique");
+
+      try {
+        const data = await apiFetch("/auth/me/activity");
+        renderStats(data.stats);
+        renderFeed(data.feed);
+      } catch (err) {
+        document.getElementById("feed-list").innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

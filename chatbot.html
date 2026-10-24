@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assistant IA — IT Knowledge Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main-content">
+      <div class="topheader" id="topheader"></div>
+
+      <div class="page" style="max-width: 760px;">
+        <h2>Assistant IA</h2>
+        <p class="subtitle">Je suis là pour vous aider ! Décrivez votre problème en détail ou posez votre question.</p>
+
+        <div class="chat-window" id="chat-window"></div>
+
+        <div id="suggestions-box">
+          <h4 style="font-size:13px; color: var(--neutre-500); font-weight:600;">Suggestions populaires</h4>
+          <div class="suggestions-grid">
+            <div class="suggestion-chip" data-text="Problème de connexion VPN">Problème de connexion VPN</div>
+            <div class="suggestion-chip" data-text="Erreur application métier">Erreur application métier</div>
+            <div class="suggestion-chip" data-text="Problème d'impression">Problème d'impression</div>
+            <div class="suggestion-chip" data-text="Lenteur réseau">Lenteur réseau</div>
+          </div>
+        </div>
+
+        <form class="chat-form" id="chat-form" style="margin-top:1.25rem;">
+          <textarea id="chat-input" placeholder="Décrivez votre problème..." required></textarea>
+          <button type="submit" class="btn-primary">Envoyer</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="api.js"></script>
+  <script>
+    requireAuth();
+
+    const chatWindow = document.getElementById("chat-window");
+    const chatForm = document.getElementById("chat-form");
+    const chatInput = document.getElementById("chat-input");
+    const suggestionsBox = document.getElementById("suggestions-box");
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function addUserBubble(text) {
+      const bubble = document.createElement("div");
+      bubble.className = "chat-bubble chat-bubble-user";
+      bubble.textContent = text;
+      chatWindow.appendChild(bubble);
+    }
+
+    function addLoadingBubble() {
+      const bubble = document.createElement("div");
+      bubble.className = "chat-loading";
+      bubble.textContent = "J'ai trouvé les incidents similaires, un instant...";
+      chatWindow.appendChild(bubble);
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+      return bubble;
+    }
+
+    function addBotBubble(response) {
+      const bubble = document.createElement("div");
+      bubble.className = "chat-bubble chat-bubble-bot";
+      bubble.textContent = response.message;
+
+      if (response.found_match && response.solutions.length > 0) {
+        const box = document.createElement("div");
+        box.className = "chat-solutions";
+        box.innerHTML = response.solutions.map((item) => `
+          <div class="chat-solution-card ${item.is_accepted ? "accepted" : ""}">
+            <div class="meta-row" style="margin-bottom:0.3rem;">
+              <span class="star-badge">★ ${item.solution.stars_count}</span>
+              <span>·</span><span>score ${item.score.toFixed(2)}</span>
+              ${item.is_accepted ? "<span>· ✓ solution retenue</span>" : ""}
+            </div>
+            <a href="incident-detail.html?id=${item.solution.incident_id}">Voir l'incident d'origine →</a>
+          </div>
+        `).join("");
+        bubble.appendChild(box);
+      } else if (!response.found_match) {
+        const link = document.createElement("div");
+        link.style.marginTop = "0.6rem";
+        link.innerHTML = `<a href="incident-new.html">+ Déclarer ce nouvel incident</a>`;
+        bubble.appendChild(link);
+      }
+      chatWindow.appendChild(bubble);
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+
+    async function sendMessage(text) {
+      if (!text) return;
+      suggestionsBox.style.display = "none";
+      addUserBubble(text);
+      chatInput.value = "";
+      chatInput.disabled = true;
+      const loadingBubble = addLoadingBubble();
+
+      try {
+        const response = await apiFetch("/chatbot/ask", { method: "POST", body: JSON.stringify({ message: text }) });
+        loadingBubble.remove();
+        addBotBubble(response);
+      } catch (err) {
+        loadingBubble.remove();
+        const bubble = document.createElement("div");
+        bubble.className = "chat-bubble chat-bubble-bot";
+        bubble.textContent = `Désolé, une erreur est survenue : ${err.message}`;
+        chatWindow.appendChild(bubble);
+      } finally {
+        chatInput.disabled = false;
+        chatInput.focus();
+      }
+    }
+
+    chatForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      sendMessage(chatInput.value.trim());
+    });
+
+    document.querySelectorAll(".suggestion-chip").forEach((chip) => {
+      chip.addEventListener("click", () => sendMessage(chip.dataset.text));
+    });
+
+    fetchCurrentTechnician().then((me) => {
+      if (!me) return;
+      renderAppShell(me, "chatbot");
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Espace admin — IT Knowledge Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main-content">
+      <div class="topheader" id="topheader"></div>
+
+      <div class="page">
+        <h2>Administration</h2>
+        <p class="subtitle">Vue d'ensemble de la plateforme.</p>
+
+        <div class="stats-grid" id="admin-stats-grid"></div>
+
+        <div class="admin-analytics-row">
+          <div class="card">
+            <h4>Évolution des incidents (6 derniers mois)</h4>
+            <div class="chart-bars" id="chart-bars"></div>
+          </div>
+          <div class="card">
+            <h4>Top départements</h4>
+            <div id="top-departments-list"></div>
+          </div>
+        </div>
+
+        <h2 style="margin-top:2rem;">Comptes en attente de validation</h2>
+        <p class="subtitle">Chaque technicien doit être approuvé avant de pouvoir se connecter — c'est le contrôle d'accès de la plateforme.</p>
+
+        <div id="alert-box"></div>
+        <div id="pending-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="api.js"></script>
+  <script>
+    let departmentsById = {};
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function monthLabel(monthKey) {
+      const [year, month] = monthKey.split("-");
+      const noms = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
+      return noms[parseInt(month, 10) - 1];
+    }
+
+    function renderAdminStats(stats) {
+      const o = stats.overview;
+      document.getElementById("admin-stats-grid").innerHTML = `
+        <div class="stat-card"><div class="value blue">${o.active_technicians}</div><div class="label">Techniciens actifs</div></div>
+        <div class="stat-card"><div class="value teal">${o.total_incidents}</div><div class="label">Incidents au total</div></div>
+        <div class="stat-card"><div class="value orange">${o.incidents_this_month}</div><div class="label">Incidents ce mois</div></div>
+        <div class="stat-card"><div class="value green">${o.resolution_rate}%</div><div class="label">Taux de résolution</div></div>
+      `;
+
+      const maxCount = Math.max(1, ...stats.incidents_by_month.map((m) => m.count));
+      document.getElementById("chart-bars").innerHTML = stats.incidents_by_month.map((m) => `
+        <div class="chart-bar">
+          <div class="chart-bar-track">
+            <div class="chart-bar-fill" style="height:${(m.count / maxCount) * 100}%;"></div>
+          </div>
+          <div class="chart-bar-value">${m.count}</div>
+          <div class="chart-bar-label">${monthLabel(m.month)}</div>
+        </div>
+      `).join("");
+
+      const topList = document.getElementById("top-departments-list");
+      if (stats.top_departments.length === 0) {
+        topList.innerHTML = `<div class="empty-state">Aucun incident déclaré pour l'instant.</div>`;
+      } else {
+        const maxDept = Math.max(...stats.top_departments.map((d) => d.count));
+        topList.innerHTML = stats.top_departments.map((d) => `
+          <div class="dept-row">
+            <div class="dept-row-label">${escapeHtml(d.name)}</div>
+            <div class="dept-row-bar"><div class="dept-row-fill" style="width:${(d.count / maxDept) * 100}%;"></div></div>
+            <div class="dept-row-count">${d.count}</div>
+          </div>
+        `).join("");
+      }
+    }
+
+    async function loadAdminStats() {
+      try {
+        const stats = await apiFetch("/admin/stats");
+        renderAdminStats(stats);
+      } catch (err) {
+        document.getElementById("admin-stats-grid").innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+      }
+    }
+
+    async function loadDepartmentsMap() {
+      const departments = await apiFetch("/departments");
+      departmentsById = Object.fromEntries(departments.map((d) => [d.id, d.nom]));
+    }
+
+    async function loadPending() {
+      const list = document.getElementById("pending-list");
+      list.innerHTML = `<p class="subtitle">Chargement...</p>`;
+      try {
+        const pending = await apiFetch("/admin/pending-technicians");
+        if (pending.length === 0) {
+          list.innerHTML = `<div class="empty-state">Aucun compte en attente pour le moment.</div>`;
+          return;
+        }
+        list.innerHTML = pending.map((t) => `
+          <div class="card admin-row">
+            <div class="admin-row-info">
+              <span class="admin-row-email">${escapeHtml(t.email)}</span>
+              <span class="admin-row-meta">${escapeHtml(departmentsById[t.department_id] || "Département inconnu")} · inscrit le ${formatDate(t.created_at)}</span>
+            </div>
+            <div class="admin-row-actions">
+              <button class="btn-primary btn-sm" onclick="approve('${t.id}')">Approuver</button>
+              <button class="btn-danger btn-sm" onclick="reject('${t.id}')">Rejeter</button>
+            </div>
+          </div>
+        `).join("");
+      } catch (err) {
+        list.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+      }
+    }
+
+    async function approve(id) {
+      const alertBox = document.getElementById("alert-box"); alertBox.innerHTML = "";
+      try { await apiFetch(`/admin/technicians/${id}/approve`, { method: "POST" }); await loadPending(); }
+      catch (err) { alertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`; }
+    }
+
+    async function reject(id) {
+      const alertBox = document.getElementById("alert-box"); alertBox.innerHTML = "";
+      if (!confirm("Rejeter et supprimer définitivement ce compte ?")) return;
+      try { await apiFetch(`/admin/technicians/${id}/reject`, { method: "DELETE" }); await loadPending(); }
+      catch (err) { alertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`; }
+    }
+
+    async function init() {
+      const me = await fetchCurrentTechnician();
+      if (!me) return;
+      if (me.role !== "admin") { window.location.href = "dashboard.html"; return; }
+      renderAppShell(me, "admin");
+      await loadAdminStats();
+      await loadDepartmentsMap();
+      await loadPending();
+    }
+
+    init();
+  </script>
+</body>
+</html>

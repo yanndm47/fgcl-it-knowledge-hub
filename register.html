@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inscription — IT Knowledge Hub</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body { background: linear-gradient(135deg, #062851 0%, #0B2647 55%, #14A8B7 140%); min-height: 100vh; }
+    .auth-card { background: #fff; border-radius: 14px; box-shadow: 0 20px 60px rgba(6,40,81,0.35); padding: 2.25rem 2rem; }
+    .auth-logo { display: flex; justify-content: center; margin-bottom: 0.5rem; }
+    .auth-logo img { height: 40px; }
+    .auth-title { text-align: center; font-weight: 600; color: var(--neutre-700); margin-bottom: 1.5rem; }
+  </style>
+</head>
+<body>
+  <div class="page-narrow">
+    <div class="auth-card">
+      <div class="auth-logo"><img src="assets/logo.png" alt="FGCL"></div>
+      <div class="auth-title">IT Knowledge Hub<br><span style="font-weight:400; color: var(--neutre-500); font-size: 13px;">Créer votre compte technicien</span></div>
+
+      <div id="alert-box"></div>
+
+      <form id="register-form">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="votre.email@fgcl.com" required>
+
+        <label for="password">Mot de passe</label>
+        <input type="password" id="password" minlength="8" placeholder="8 caractères minimum" required>
+
+        <label for="department">Département</label>
+        <select id="department" required>
+          <option value="" disabled selected>Choisir...</option>
+        </select>
+
+        <button type="submit" class="btn-primary btn-block">Créer mon compte</button>
+      </form>
+    </div>
+
+    <p style="text-align:center; color: #fff; font-size: 13px; margin-top: 1.25rem;">
+      Déjà un compte ? <a href="login.html" style="color:#fff; text-decoration:underline;">Se connecter</a>
+    </p>
+  </div>
+
+  <script src="api.js"></script>
+  <script>
+    populateDepartments(document.getElementById("department"));
+
+    document.getElementById("register-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const alertBox = document.getElementById("alert-box");
+      alertBox.innerHTML = "";
+
+      const payload = {
+        email: document.getElementById("email").value,
+        password: document.getElementById("password").value,
+        department_id: document.getElementById("department").value,
+      };
+
+      try {
+        await apiFetch("/auth/register", { method: "POST", body: JSON.stringify(payload) });
+        alertBox.innerHTML = `<div class="alert alert-success">
+          Compte créé. Il doit maintenant être validé par un administrateur avant que tu puisses te connecter.
+        </div>`;
+        document.getElementById("register-form").reset();
+      } catch (err) {
+        alertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+      }
+    });
+  </script>
+</body>
+</html>

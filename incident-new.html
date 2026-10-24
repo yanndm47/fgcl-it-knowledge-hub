@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Déclarer un incident — IT Knowledge Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main-content">
+      <div class="topheader" id="topheader"></div>
+
+      <div class="page" style="max-width: 640px;">
+        <a href="dashboard.html" style="font-size:13px;">← Retour à l'accueil</a>
+        <h2 style="margin-top:0.75rem;">Déclarer un incident</h2>
+        <p class="subtitle">Décris le problème le plus précisément possible : ça aide à retrouver des incidents similaires.</p>
+
+        <div id="alert-box"></div>
+
+        <form id="incident-form" class="card">
+          <label for="titre">Titre</label>
+          <input type="text" id="titre" minlength="3" maxlength="200" required>
+
+          <label for="department">Département concerné</label>
+          <select id="department" required>
+            <option value="" disabled selected>Choisir...</option>
+          </select>
+
+          <label for="symptomes">Symptômes observés</label>
+          <textarea id="symptomes" required placeholder="Ce que tu vois concrètement : messages d'erreur, comportement anormal..."></textarea>
+
+          <label for="description">Description</label>
+          <textarea id="description" required placeholder="Contexte général de l'incident."></textarea>
+
+          <label for="contexte">Contexte (optionnel)</label>
+          <textarea id="contexte" placeholder="Actions déjà tentées, environnement, matériel concerné..."></textarea>
+
+          <button type="submit" class="btn-primary btn-block">Déclarer l'incident</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="api.js"></script>
+  <script>
+    requireAuth();
+    fetchCurrentTechnician().then((me) => {
+      if (!me) return;
+      renderAppShell(me, "incidents");
+    });
+    populateDepartments(document.getElementById("department"));
+
+    document.getElementById("incident-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const alertBox = document.getElementById("alert-box");
+      alertBox.innerHTML = "";
+
+      const payload = {
+        titre: document.getElementById("titre").value,
+        description: document.getElementById("description").value,
+        symptomes: document.getElementById("symptomes").value,
+        contexte: document.getElementById("contexte").value || null,
+        department_id: document.getElementById("department").value,
+      };
+
+      try {
+        const incident = await apiFetch("/incidents", { method: "POST", body: JSON.stringify(payload) });
+        window.location.href = `incident-detail.html?id=${incident.id}`;
+      } catch (err) {
+        alertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+      }
+    });
+  </script>
+</body>
+</html>

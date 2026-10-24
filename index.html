@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>IT Knowledge Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <script src="api.js"></script>
+  <script>
+    async function route() {
+      if (!getToken()) {
+        window.location.href = "login.html";
+        return;
+      }
+      try {
+        const me = await apiFetch("/auth/me");
+        window.location.href = me.role === "admin" ? "admin-dashboard.html" : "dashboard.html";
+      } catch {
+        clearToken();
+        window.location.href = "login.html";
+      }
+    }
+    route();
+  </script>
+</body>
+</html>

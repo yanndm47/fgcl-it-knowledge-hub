@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accueil — IT Knowledge Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main-content">
+      <div class="topheader" id="topheader"></div>
+
+      <div class="page">
+        <h2 id="greeting">Bonjour !</h2>
+        <p class="subtitle">Voici un aperçu de votre activité.</p>
+
+        <div class="stats-grid" id="stats-grid"></div>
+
+        <div class="home-row">
+          <div>
+            <h4>Activité récente</h4>
+            <div id="incident-list"></div>
+            <a href="incidents.html" class="btn btn-secondary" style="margin-top:0.5rem;">Voir tout</a>
+          </div>
+
+          <div class="assistant-teaser card">
+            <div class="assistant-teaser-icon">🤖</div>
+            <h4>Assistant IA</h4>
+            <p class="subtitle" style="margin-bottom:1rem;">Pose ta question, l'assistant recherche dans l'historique résolu.</p>
+            <a href="chatbot.html" class="btn btn-primary btn-block">Démarrer une conversation</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="api.js"></script>
+  <script>
+    requireAuth();
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function renderStats(incidents) {
+      const total = incidents.length;
+      const ouverts = incidents.filter((i) => i.status === "ouvert").length;
+      const fermes = incidents.filter((i) => i.status === "ferme").length;
+      const taux = total > 0 ? Math.round((fermes / total) * 100) : 0;
+
+      document.getElementById("stats-grid").innerHTML = `
+        <div class="stat-card"><div class="value blue">${total}</div><div class="label">Incidents au total</div></div>
+        <div class="stat-card"><div class="value orange">${ouverts}</div><div class="label">Ouverts</div></div>
+        <div class="stat-card"><div class="value teal">${fermes}</div><div class="label">Résolus</div></div>
+        <div class="stat-card"><div class="value green">${taux}%</div><div class="label">Taux de résolution</div></div>
+      `;
+    }
+
+    function renderRecent(incidents) {
+      const list = document.getElementById("incident-list");
+      if (incidents.length === 0) {
+        list.innerHTML = `<div class="empty-state">Aucun incident pour l'instant. <a href="incident-new.html">Déclarer le premier</a>.</div>`;
+        return;
+      }
+      list.innerHTML = incidents.slice(0, 5).map((incident) => `
+        <a class="card incident-card" href="incident-detail.html?id=${incident.id}">
+          <div class="incident-card-top">
+            <div class="incident-title">${escapeHtml(incident.titre)}</div>
+            ${statusPill(incident.status)}
+          </div>
+          <div class="meta-row">
+            <span class="ticket-id">#${shortId(incident.id)}</span>
+            <span>·</span>
+            <span>${formatDate(incident.created_at)}</span>
+          </div>
+        </a>
+      `).join("");
+    }
+
+    async function init() {
+      const me = await fetchCurrentTechnician();
+      if (!me) return;
+      renderAppShell(me, "dashboard");
+      document.getElementById("greeting").textContent = `Bonjour ${me.email.split("@")[0]} !`;
+
+      try {
+        const incidents = await apiFetch("/incidents");
+        renderStats(incidents);
+        renderRecent(incidents.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      } catch (err) {
+        document.getElementById("incident-list").innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
