@@ -1,0 +1,23 @@
+# Backend
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# ORM et base de données
+sqlalchemy==2.0.35
+
+# Authentification
+python-jose[cryptography]==3.3.0
+bcrypt==4.2.0
+python-multipart==0.0.9
+
+# Recherche vectorielle et embeddings (repris du chatbot FGCL)
+chromadb==0.5.5
+sentence-transformers==3.1.1
+
+# Génération de réponse
+google-genai==2.20.0
+
+# Utilitaires
+python-dotenv==1.0.1
+pydantic==2.12.5
+email-validator==2.2.0

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connaissances — IT Knowledge Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main-content">
+      <div class="topheader" id="topheader"></div>
+
+      <div class="page">
+        <h2>Base de connaissances</h2>
+        <p class="subtitle">
+          Chaque incident résolu devient une fiche de connaissance consultable —
+          pas de contenu séparé à maintenir, la base se construit d'elle-même
+          au fil des tickets fermés.
+        </p>
+
+        <input type="text" class="search-input" id="search-input" style="max-width:420px; margin-bottom:1.5rem;"
+               placeholder="Rechercher un article, une solution...">
+
+        <div class="kb-layout">
+          <div class="card kb-categories">
+            <h4 style="margin-bottom:0.75rem;">Catégories</h4>
+            <div id="category-list"></div>
+          </div>
+
+          <div>
+            <h4 style="margin-bottom:0.75rem;">Articles récents</h4>
+            <div id="article-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="api.js"></script>
+  <script>
+    requireAuth();
+
+    let allResolved = [];
+    let departmentsById = {};
+    let activeDepartment = "";
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function renderCategories() {
+      const counts = {};
+      allResolved.forEach((i) => { counts[i.department_id] = (counts[i.department_id] || 0) + 1; });
+
+      const rows = [`
+        <div class="category-row ${activeDepartment === "" ? "active" : ""}" data-dept="">
+          Toutes les catégories <span class="category-count">${allResolved.length}</span>
+        </div>
+      `];
+      Object.entries(departmentsById).forEach(([id, nom]) => {
+        rows.push(`
+          <div class="category-row ${activeDepartment === id ? "active" : ""}" data-dept="${id}">
+            ${escapeHtml(nom)} <span class="category-count">${counts[id] || 0}</span>
+          </div>
+        `);
+      });
+
+      const box = document.getElementById("category-list");
+      box.innerHTML = rows.join("");
+      box.querySelectorAll(".category-row").forEach((el) => {
+        el.addEventListener("click", () => {
+          activeDepartment = el.dataset.dept;
+          renderCategories();
+          renderArticles();
+        });
+      });
+    }
+
+    function renderArticles() {
+      const search = document.getElementById("search-input").value.trim().toLowerCase();
+      let filtered = allResolved;
+      if (activeDepartment) filtered = filtered.filter((i) => i.department_id === activeDepartment);
+      if (search) filtered = filtered.filter((i) => i.titre.toLowerCase().includes(search));
+
+      const box = document.getElementById("article-list");
+      if (filtered.length === 0) {
+        box.innerHTML = `<div class="empty-state">Aucun article ne correspond pour l'instant.</div>`;
+        return;
+      }
+      box.innerHTML = filtered.map((i) => `
+        <a class="card incident-card" href="incident-detail.html?id=${i.id}">
+          <div class="incident-card-top">
+            <div class="incident-title">${escapeHtml(i.titre)}</div>
+            <span class="tag tag-resolu">Résolu</span>
+          </div>
+          <div class="meta-row">
+            <span>${escapeHtml(departmentsById[i.department_id] || "")}</span>
+            <span>·</span>
+            <span class="ticket-id">${formatDate(i.closed_at || i.created_at)}</span>
+          </div>
+        </a>
+      `).join("");
+    }
+
+    async function init() {
+      const me = await fetchCurrentTechnician();
+      if (!me) return;
+      renderAppShell(me, "connaissances");
+
+      const departments = await apiFetch("/departments");
+      departmentsById = Object.fromEntries(departments.map((d) => [d.id, d.nom]));
+
+      allResolved = await apiFetch("/incidents?status=ferme");
+      allResolved.sort((a, b) => new Date(b.closed_at || b.created_at) - new Date(a.closed_at || a.created_at));
+
+      renderCategories();
+      renderArticles();
+    }
+
+    document.getElementById("search-input").addEventListener("input", renderArticles);
+    init();
+  </script>
+</body>
+</html>

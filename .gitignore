@@ -1,0 +1,19 @@
+# Environnement Python
+venv/
+__pycache__/
+*.pyc
+
+# Variables sensibles — jamais versionnées
+.env
+
+# Base de données applicative
+*.db
+*.sqlite3
+
+# Base vectorielle générée
+chroma_db/
+
+# Divers OS / éditeurs
+.DS_Store
+.vscode/
+.idea/

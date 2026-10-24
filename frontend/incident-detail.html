@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Détail de l'incident — IT Knowledge Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main-content">
+      <div class="topheader" id="topheader"></div>
+
+      <div class="page" style="max-width: 760px;">
+        <a href="dashboard.html" style="font-size:13px;">← Retour à l'accueil</a>
+        <div id="incident-box" style="margin-top:0.75rem;"></div>
+
+        <div class="tabs">
+          <div class="tab active" data-tab="details">Détails</div>
+          <div class="tab disabled" title="Extension future, hors périmètre des 30 jours">Timeline</div>
+          <div class="tab active" data-tab="solutions" id="tab-solutions">Solutions</div>
+          <div class="tab disabled" title="Extension future, hors périmètre des 30 jours">Pièces jointes</div>
+          <div class="tab disabled" title="Extension future, hors périmètre des 30 jours">Commentaires</div>
+        </div>
+
+        <div id="panel-solutions">
+          <h4>Solutions proposées</h4>
+          <div id="solutions-box"></div>
+          <div id="add-solution-box"></div>
+          <div id="close-box"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="api.js"></script>
+  <script>
+    requireAuth();
+
+    const incidentId = new URLSearchParams(window.location.search).get("id");
+    if (!incidentId) window.location.href = "dashboard.html";
+
+    let me = null;
+    let incident = null;
+    let solutionsList = [];
+    let isFavorited = false;
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    async function loadAll() {
+      me = await fetchCurrentTechnician();
+      if (!me) return;
+      renderAppShell(me, "incidents");
+
+      try {
+        incident = await apiFetch(`/incidents/${incidentId}`);
+        solutionsList = await apiFetch(`/incidents/${incidentId}/solutions`);
+        const favorites = await apiFetch("/incidents/favorites/mine");
+        isFavorited = favorites.some((f) => f.id === incidentId);
+      } catch (err) {
+        document.getElementById("incident-box").innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+        return;
+      }
+
+      renderIncident();
+      renderSolutions();
+      renderAddSolutionForm();
+      renderCloseSection();
+    }
+
+    async function toggleFavorite() {
+      try {
+        if (isFavorited) {
+          await apiFetch(`/incidents/${incidentId}/favorite`, { method: "DELETE" });
+        } else {
+          await apiFetch(`/incidents/${incidentId}/favorite`, { method: "POST" });
+        }
+        isFavorited = !isFavorited;
+        renderIncident();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    function renderIncident() {
+      document.getElementById("incident-box").innerHTML = `
+        <div class="card">
+          <div class="incident-card-top">
+            <div>
+              <span class="ticket-id">#${shortId(incident.id)}</span>
+              <h2 style="margin:0.2rem 0 0;">${escapeHtml(incident.titre)}</h2>
+            </div>
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+              ${statusPill(incident.status)}
+              <button class="btn-star btn-sm" onclick="toggleFavorite()">${isFavorited ? "★ Retirer des favoris" : "☆ Ajouter aux favoris"}</button>
+            </div>
+          </div>
+          <div class="meta-row" style="margin-bottom: 1rem;">
+            <span>Ouvert le ${formatDate(incident.created_at)}</span>
+            ${incident.closed_at ? `<span>· Fermé le ${formatDate(incident.closed_at)}</span>` : ""}
+          </div>
+          <p><strong>Symptômes</strong><br>${escapeHtml(incident.symptomes)}</p>
+          <p><strong>Description</strong><br>${escapeHtml(incident.description)}</p>
+          ${incident.contexte ? `<p><strong>Contexte</strong><br>${escapeHtml(incident.contexte)}</p>` : ""}
+        </div>
+      `;
+    }
+
+    function renderSolutions() {
+      const box = document.getElementById("solutions-box");
+      if (solutionsList.length === 0) {
+        box.innerHTML = `<div class="empty-state">Aucune solution proposée pour l'instant.</div>`;
+        return;
+      }
+      box.innerHTML = solutionsList.map((sol) => {
+        const isAccepted = incident.accepted_solution_id === sol.id;
+        const isOwn = me.id === sol.author_id;
+        const starDisabled = isOwn ? "disabled title=\"Tu ne peux pas étoiler ta propre solution\"" : "";
+        return `
+          <div class="solution ${isAccepted ? "accepted" : ""}">
+            <div class="solution-header">
+              <span>#${shortId(sol.author_id)}${sol.is_documented_by_opener ? " · documentée par l'ouvreur" : ""}${isAccepted ? " · ✓ solution retenue" : ""}</span>
+              <span class="star-badge">★ ${sol.stars_count}</span>
+            </div>
+            <p style="margin: 0 0 0.75rem;">${escapeHtml(sol.contenu)}</p>
+            <button class="btn-star btn-sm" ${starDisabled} onclick="starSolution('${sol.id}')">★ Cette solution m'a aidé</button>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function starSolution(solutionId) {
+      try {
+        await apiFetch(`/solutions/${solutionId}/star`, { method: "POST" });
+        await loadAll();
+      } catch (err) { alert(err.message); }
+    }
+
+    function renderAddSolutionForm() {
+      const box = document.getElementById("add-solution-box");
+      if (incident.status === "ferme") { box.innerHTML = ""; return; }
+      box.innerHTML = `
+        <h4>Proposer une solution</h4>
+        <form id="solution-form" class="card">
+          <div id="solution-alert"></div>
+          <textarea id="solution-contenu" placeholder="Décris ce qui a fonctionné, ou ce que tu proposes d'essayer..." required></textarea>
+          <button type="submit" class="btn-primary btn-block">Envoyer la réponse</button>
+        </form>
+      `;
+      document.getElementById("solution-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const alertBox = document.getElementById("solution-alert");
+        try {
+          await apiFetch(`/incidents/${incidentId}/solutions`, {
+            method: "POST",
+            body: JSON.stringify({ contenu: document.getElementById("solution-contenu").value }),
+          });
+          await loadAll();
+        } catch (err) {
+          alertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+        }
+      });
+    }
+
+    function renderCloseSection() {
+      const box = document.getElementById("close-box");
+      if (incident.status === "ferme" || me.id !== incident.opened_by) { box.innerHTML = ""; return; }
+
+      const solutionOptions = solutionsList.map((sol) => `
+        <label style="display:flex; align-items:flex-start; gap:0.5rem; font-weight:400; color: var(--neutre-900);">
+          <input type="radio" name="accepted_solution" value="${sol.id}" style="width:auto; margin-top:0.3rem;">
+          <span>${escapeHtml(sol.contenu.slice(0, 80))}${sol.contenu.length > 80 ? "..." : ""} <span class="star-badge">★ ${sol.stars_count}</span></span>
+        </label>
+      `).join("");
+
+      box.innerHTML = `
+        <h4>Fermer ce ticket</h4>
+        <p class="subtitle">Seul toi, en tant qu'ouvreur, peux fermer ce ticket.</p>
+        <div class="card">
+          <div id="close-alert"></div>
+          ${solutionsList.length > 0 ? `
+            <label>Retenir une réponse existante</label>
+            <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem;">${solutionOptions}</div>
+            <button class="btn-secondary" onclick="closeWithExisting()">Fermer avec cette solution</button>
+            <hr style="border-color: var(--neutre-200); margin: 1.5rem 0;">
+          ` : ""}
+          <label for="own-solution">Ou : j'ai trouvé la solution moi-même</label>
+          <textarea id="own-solution" placeholder="Décris la solution que tu as trouvée..."></textarea>
+          <button class="btn-primary btn-block" onclick="closeWithOwn()">Documenter et fermer</button>
+        </div>
+      `;
+    }
+
+    async function closeWithExisting() {
+      const selected = document.querySelector('input[name="accepted_solution"]:checked');
+      const alertBox = document.getElementById("close-alert");
+      if (!selected) { alertBox.innerHTML = `<div class="alert alert-error">Sélectionne une solution.</div>`; return; }
+      try {
+        await apiFetch(`/incidents/${incidentId}/close`, { method: "POST", body: JSON.stringify({ accepted_solution_id: selected.value }) });
+        await loadAll();
+      } catch (err) { alertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`; }
+    }
+
+    async function closeWithOwn() {
+      const content = document.getElementById("own-solution").value;
+      const alertBox = document.getElementById("close-alert");
+      if (!content.trim()) { alertBox.innerHTML = `<div class="alert alert-error">Décris la solution avant de fermer le ticket.</div>`; return; }
+      try {
+        await apiFetch(`/incidents/${incidentId}/close`, { method: "POST", body: JSON.stringify({ own_solution_content: content }) });
+        await loadAll();
+      } catch (err) { alertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`; }
+    }
+
+    loadAll();
+  </script>
+</body>
+</html>
