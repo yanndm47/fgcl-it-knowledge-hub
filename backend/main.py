@@ -10,10 +10,14 @@ encore aucune route métier. Les routeurs seront ajoutés progressivement :
 - J19    : routers/chatbot.py     (analyse, recherche, classement, recommandation)
 """
 
+import os
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routers import auth, admin, incidents, solutions, departments, chatbot, notifications_router
+
+load_dotenv()
 
 app = FastAPI(
     title="IT Knowledge Hub",
@@ -21,10 +25,19 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# À restreindre à l'origine réelle du frontend avant tout déploiement (cf. cahier des charges, section 6)
+# Origines autorisées : toujours le frontend local (développement), plus
+# l'origine réelle du frontend déployé (ex. GitHub Pages), lue depuis la
+# variable d'environnement FRONTEND_URL définie sur l'hébergeur en ligne —
+# jamais codée en dur, pour ne pas avoir à republier le code à chaque
+# changement d'adresse.
+_allowed_origins = ["http://127.0.0.1:5500", "http://localhost:5500"]
+_deployed_frontend = os.getenv("FRONTEND_URL")
+if _deployed_frontend:
+    _allowed_origins.append(_deployed_frontend)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5500", "http://localhost:5500"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

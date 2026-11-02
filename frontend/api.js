@@ -5,7 +5,13 @@
  * localStorage fonctionne normalement ici).
  */
 
-const API_BASE = "http://127.0.0.1:8000";
+// En local (développement) : parle au backend local. Une fois déployé
+// (ex. sur GitHub Pages), parle au backend en ligne (ex. Render) — à
+// remplacer ci-dessous par la vraie adresse une fois le backend déployé.
+const DEPLOYED_API_BASE = "https://REMPLACE-MOI.onrender.com";
+const API_BASE = (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost")
+  ? "http://127.0.0.1:8000"
+  : DEPLOYED_API_BASE;
 
 function getToken() {
   return localStorage.getItem("ikh_token");
